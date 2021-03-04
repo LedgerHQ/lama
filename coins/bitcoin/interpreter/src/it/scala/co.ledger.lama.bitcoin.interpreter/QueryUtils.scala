@@ -1,22 +1,44 @@
 package co.ledger.lama.bitcoin.interpreter
 
-import java.util.UUID
-
+import cats.data.NonEmptyList
 import cats.effect.IO
-import co.ledger.lama.bitcoin.common.models.interpreter.{Operation, TransactionView}
+import co.ledger.lama.bitcoin.common.models.interpreter.{
+  InputView,
+  Operation,
+  OutputView,
+  TransactionView
+}
 import co.ledger.lama.bitcoin.interpreter.models.OperationToSave
+import co.ledger.lama.bitcoin.interpreter.services.OperationQueries.Op
 import co.ledger.lama.bitcoin.interpreter.services.{OperationQueries, TransactionQueries}
+import co.ledger.lama.common.models.Sort
 import doobie.implicits._
 import doobie.util.transactor.Transactor
 import fs2.Chunk
 
-object QueryUtils {
+import java.util.UUID
 
-  def fetchTx(db: Transactor[IO], accountId: UUID, hash: String): IO[Option[TransactionView]] = {
+object QueryUtils {
+  def fetchInputAndOutputs(
+      db: Transactor[IO],
+      accountId: UUID,
+      hash: String
+  ): IO[(List[InputView], List[OutputView])] = {
     OperationQueries
-      .fetchTransaction(accountId, hash)
+      .fetchInputsWithOutputsOrderedByTxHash(accountId, Sort.Descending, NonEmptyList.one(hash))
       .transact(db)
+      .map(_._2)
+      .compile
+      .toList
+      .map(_.head)
   }
+
+  def fetchOpAndTx(
+      db: Transactor[IO],
+      accountId: Operation.AccountId,
+      operationId: Operation.UID
+  ): IO[Option[(Op, OperationQueries.Tx)]] =
+    OperationQueries.findOperation(accountId, operationId).transact(db)
 
   def saveTx(db: Transactor[IO], transaction: TransactionView, accountId: UUID): IO[Unit] = {
     TransactionQueries
@@ -47,7 +69,7 @@ object QueryUtils {
       .void
   }
 
-  def fetchOps(db: Transactor[IO], accountId: UUID): IO[List[Operation]] = {
+  def fetchOps(db: Transactor[IO], accountId: UUID): IO[List[(Op, OperationQueries.Tx)]] = {
     OperationQueries
       .fetchOperations(accountId)
       .transact(db)

@@ -65,13 +65,15 @@ object implicits {
 
   // Needs implicit because of the Transaction "None"
   implicit lazy val readOperation: Read[Operation] =
-    Read[(String, UUID, String, OperationType, BigInt, BigInt, Instant, Option[Long])]
-      .map { case (uid, accountId, hash, operationType, value, fees, time, height) =>
+    Read[
+      (String, UUID, String, OperationType, BigInt, BigInt, Instant, Option[Long], TransactionView)
+    ]
+      .map { case (uid, accountId, hash, operationType, value, fees, time, height, tx) =>
         Operation(
           Operation.UID(uid),
           accountId,
           hash,
-          None,
+          tx,
           operationType,
           value,
           fees,

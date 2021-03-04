@@ -108,7 +108,7 @@ class OperationServiceIT extends AnyFlatSpecLike with Matchers with TestResource
           trunc shouldBe false
 
           val op = ops.head
-          val tx = op.transaction.get
+          val tx = op.transaction
 
           op.accountId shouldBe accountId
           op.hash shouldBe insertTx1.hash
@@ -155,8 +155,7 @@ class OperationServiceIT extends AnyFlatSpecLike with Matchers with TestResource
           foundOperation should not be None
           val Some(op) = foundOperation
 
-          op.transaction should not be None
-          val tx = op.transaction.get
+          val tx = op.transaction
 
           op.accountId shouldBe accountId
           op.hash shouldBe insertTx1.hash
@@ -201,7 +200,7 @@ class OperationServiceIT extends AnyFlatSpecLike with Matchers with TestResource
           trunc shouldBe false
 
           val op = ops.head
-          val tx = op.transaction.get
+          val tx = op.transaction
 
           op.accountId shouldBe accountId
           op.hash shouldBe insertTx2.hash

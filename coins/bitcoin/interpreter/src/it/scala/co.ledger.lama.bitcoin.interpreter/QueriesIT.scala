@@ -1,13 +1,18 @@
 package co.ledger.lama.bitcoin.interpreter
 
+import co.ledger.lama.bitcoin.common.models.explorer._
 import java.time.Instant
 import java.util.UUID
 
 import co.ledger.lama.bitcoin.common.models.interpreter._
 import co.ledger.lama.bitcoin.interpreter.models.OperationToSave
+import co.ledger.lama.bitcoin.interpreter.services.OperationQueries.Op
 import co.ledger.lama.common.utils.IOAssertion
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
+
+import java.time.Instant
+import java.util.UUID
 
 class QueriesIT extends AnyFlatSpecLike with Matchers with TestResources {
 
@@ -49,26 +54,38 @@ class QueriesIT extends AnyFlatSpecLike with Matchers with TestResources {
       1
     )
 
-  "transaction saved in db" should "be returned and populated by fetch" in IOAssertion {
+  "transaction saved in db" should "not be returned and populated by fetch before Interpreter.compute" in IOAssertion {
     setup() *>
       appResources.use { db =>
         for {
-          _   <- QueryUtils.saveTx(db, transactionToInsert, accountId)
-          _   <- QueryUtils.saveTx(db, transactionToInsert, accountId) // check upsert
-          txO <- QueryUtils.fetchTx(db, accountId, transactionToInsert.hash)
+          _ <- QueryUtils.saveTx(db, transactionToInsert, accountId)
+          _ <- QueryUtils.saveTx(db, transactionToInsert, accountId) // check upsert
+          inputsWithOutputs <- QueryUtils.fetchInputAndOutputs(
+            db,
+            accountId,
+            transactionToInsert.hash
+          )
+
+          account = Operation.AccountId(accountId)
+
+          opWithTx <- QueryUtils.fetchOpAndTx(
+            db,
+            account,
+            Operation.uid(account, Operation.TxId(transactionToInsert.hash), opToSave.operationType)
+          )
         } yield {
 
-          val tx = txO.get
+          opWithTx shouldBe None
 
-          tx.id shouldBe transactionToInsert.id
-          tx.hash shouldBe transactionToInsert.hash
+          val inputs: Seq[InputView] = inputsWithOutputs._1
 
-          tx.inputs should have size 1
-          tx.inputs.head.value shouldBe 80000
+          inputs should have size 1
+          inputs.head.value shouldBe 80000
 
-          tx.outputs should have size 2
-          tx.outputs.filter(_.outputIndex == 0).head.value shouldBe 50000
+          val outputs: Seq[OutputView] = inputsWithOutputs._2
 
+          outputs should have size 2
+          outputs.filter(_.outputIndex == 0).head.value shouldBe 50000
         }
       }
   }
@@ -95,16 +112,15 @@ class QueriesIT extends AnyFlatSpecLike with Matchers with TestResources {
     setup() *>
       appResources.use { db =>
         for {
-          _  <- QueryUtils.saveTx(db, transactionToInsert, accountId)
-          _  <- QueryUtils.saveOp(db, opToSave)
-          op <- QueryUtils.fetchOps(db, accountId)
+          _   <- QueryUtils.saveTx(db, transactionToInsert, accountId)
+          _   <- QueryUtils.saveOp(db, opToSave)
+          ops <- QueryUtils.fetchOps(db, accountId)
         } yield {
-          op should contain only
-            Operation(
+          ops.map(_._1) should contain only
+            Op(
               opToSave.uid,
               opToSave.accountId,
               opToSave.hash,
-              None,
               opToSave.operationType,
               opToSave.value,
               opToSave.fees,

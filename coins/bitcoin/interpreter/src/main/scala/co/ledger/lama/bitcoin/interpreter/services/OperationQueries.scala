@@ -1,7 +1,6 @@
 package co.ledger.lama.bitcoin.interpreter.services
 
 import java.util.UUID
-
 import cats.data.NonEmptyList
 import cats.implicits._
 import co.ledger.lama.bitcoin.common.models.interpreter._
@@ -14,31 +13,59 @@ import doobie._
 import doobie.implicits._
 import doobie.postgres.implicits._
 import io.circe.syntax._
-import fs2.{Chunk, Stream}
+import fs2.{Chunk, Pipe, Stream}
 import io.circe.Json
+
+import java.time.Instant
 
 object OperationQueries extends IOLogging {
 
-  def fetchTransaction(
+  case class Tx(
+      id: String,
+      hash: String,
+      receivedAt: Instant,
+      lockTime: Long,
+      fees: BigInt,
+      block: Option[BlockView],
+      confirmations: Int
+  )
+
+  case class Op(
+      uid: Operation.UID,
       accountId: UUID,
-      hash: String
-  ): ConnectionIO[Option[TransactionView]] = {
-    log.logger.debug(s"Fetching transaction for accountId $accountId and hash $hash")
-    for {
-      tx <- fetchTx(accountId, hash)
-      _ = log.logger.debug(s"Transaction $tx")
-      inputs <- fetchInputs(accountId, hash).compile.toList
-      _ = log.logger.debug(s"Inputs $inputs")
-      outputs <- fetchOutputs(accountId, hash).compile.toList
-      _ = log.logger.debug(s"Outputs $outputs")
-    } yield {
-      tx.map(
-        _.copy(
-          inputs = inputs,
-          outputs = outputs
-        )
-      )
-    }
+      hash: String,
+      operationType: OperationType,
+      amount: BigInt,
+      fees: BigInt,
+      time: Instant,
+      blockHeight: Option[Long]
+  )
+
+  def fetchInputsWithOutputsOrderedByTxHash(
+      accountId: UUID,
+      sort: Sort,
+      txHashes: NonEmptyList[String]
+  ): Stream[doobie.ConnectionIO, (String, (List[InputView], List[OutputView]))] = {
+    log.logger.debug(
+      s"Fetching inputs and outputs for accountId $accountId and hashes in $txHashes"
+    )
+
+    def groupByTxHash[T]: Pipe[ConnectionIO, (String, T), (String, Chunk[T])] =
+      _.groupAdjacentBy { case (txHash, _) => txHash }
+        .map { case (txHash, chunks) => txHash -> chunks.map(_._2) }
+
+    val inputs  = fetchInputs(accountId, sort, txHashes).stream.through(groupByTxHash)
+    val outputs = fetchOutputs(accountId, sort, txHashes).stream.through(groupByTxHash)
+
+    inputs
+      .zip(outputs)
+      .collect {
+        case ((txhash1, i), (txHash2, o)) if txhash1 == txHash2 =>
+          txhash1 -> (
+            i.toList.flatten.sortBy(i => (i.outputHash, i.outputIndex)),
+            o.toList.flatten.sortBy(_.outputIndex)
+          )
+      }
   }
 
   def fetchTransactionAmounts(
@@ -164,47 +191,59 @@ object OperationQueries extends IOLogging {
        """.update.run
   }
 
-  private def fetchTx(
-      accountId: UUID,
-      hash: String
-  ): ConnectionIO[Option[TransactionView]] =
-    sql"""SELECT id, hash, block_hash, block_height, block_time, received_at, lock_time, fees, confirmations
-          FROM transaction
-          WHERE hash = $hash
-          AND account_id = $accountId
-       """
-      .query[TransactionView]
-      .option
+  private def operationOrder(sort: Sort)                = Fragment.const(s"ORDER BY o.time $sort, o.hash $sort")
+  private def allTxHashes(hashes: NonEmptyList[String]) = Fragments.in(fr"o.hash", hashes)
 
   private def fetchInputs(
       accountId: UUID,
-      hash: String
-  ): Stream[ConnectionIO, InputView] = {
-    sql"""SELECT output_hash, output_index, input_index, value, address, script_signature, txinwitness, sequence, derivation
-          FROM input
-          WHERE account_id = $accountId
-          AND hash = $hash
-       """
-      .query[InputView]
-      .stream
+      sort: Sort,
+      txHashes: NonEmptyList[String]
+  ) = {
+
+    val belongsToTxs = allTxHashes(txHashes)
+
+    (sql"""
+          SELECT i.hash, i.output_hash, i.output_index, i.input_index, i.value, i.address, i.script_signature, i.txinwitness, i.sequence, i.derivation
+            FROM operation o 
+            LEFT JOIN input i on i.account_id = o.account_id and i.hash = o.hash
+           WHERE i.account_id = $accountId
+             AND $belongsToTxs
+       """ ++ operationOrder(sort))
+      .query[(String, Option[InputView])]
   }
 
   private def fetchOutputs(
       accountId: UUID,
-      hash: String
-  ): Stream[ConnectionIO, OutputView] =
-    sql"""SELECT output_index, value, address, script_hex, change_type, derivation
-          FROM output
-          WHERE account_id = $accountId
-          AND hash = $hash
-       """
-      .query[OutputView]
-      .stream
+      sort: Sort,
+      txHashes: NonEmptyList[String]
+  ) = {
+
+    val belongsToTxs = allTxHashes(txHashes)
+
+    (
+      sql"""
+          SELECT output.hash, output.output_index, output.value, output.address, output.script_hex, output.change_type, output.derivation
+            FROM operation o  
+            LEFT JOIN output on output.account_id = o.account_id and output.hash = o.hash
+           WHERE output.account_id = $accountId
+             AND $belongsToTxs
+       """ ++ operationOrder(sort)
+    ).query[(String, Option[OutputView])]
+  }
 
   def countOperations(accountId: UUID, blockHeight: Long = 0L): ConnectionIO[Int] =
     sql"""SELECT COUNT(*) FROM operation WHERE account_id = $accountId AND (block_height >= $blockHeight OR block_height IS NULL)"""
       .query[Int]
       .unique
+
+  private val operationWithTx =
+    sql"""
+         SELECT 
+           o.uid, o.account_id, o.hash, o.operation_type, o.amount, o.fees, o.time, o.block_height,
+           t.id, t.hash, t.received_at, t.lock_time, t.fees, t.block_hash, t.block_height, t.block_time, t.confirmations
+           FROM "transaction" t 
+           JOIN "operation" o on t.hash = o.hash and o.account_id = t.account_id 
+       """
 
   def fetchOperations(
       accountId: UUID,
@@ -212,33 +251,36 @@ object OperationQueries extends IOLogging {
       sort: Sort = Sort.Descending,
       limit: Option[Int] = None,
       offset: Option[Int] = None
-  ): Stream[ConnectionIO, Operation] = {
-    val orderF  = Fragment.const(s"ORDER BY time $sort, hash $sort")
+  ): Stream[ConnectionIO, (Op, Tx)] = {
     val limitF  = limit.map(l => fr"LIMIT $l").getOrElse(Fragment.empty)
     val offsetF = offset.map(o => fr"OFFSET $o").getOrElse(Fragment.empty)
 
-    val query =
-      sql"""SELECT uid, account_id, hash, operation_type, amount, fees, time, block_height
-              FROM operation
-             WHERE account_id = $accountId
-               AND (block_height >= $blockHeight
-                OR block_height IS NULL)
-         """ ++ orderF ++ limitF ++ offsetF
-    query.query[Operation].stream
+    val filter =
+      fr"""
+             WHERE o.account_id = $accountId
+               AND (o.block_height >= $blockHeight
+                OR o.block_height IS NULL)
+         """ ++ operationOrder(sort) ++ limitF ++ offsetF
+
+    (operationWithTx ++ filter)
+      .query[(Op, Tx)]
+      .stream
   }
 
   def findOperation(
       accountId: Operation.AccountId,
       operationId: Operation.UID
-  ): ConnectionIO[Option[Operation]] = {
+  ): ConnectionIO[Option[(Op, Tx)]] = {
 
-    sql"""SELECT uid, account_id, hash, operation_type, amount, fees, time, block_height
-              FROM operation
-             WHERE account_id = ${accountId.value}
-               AND uid = ${operationId.hex}
-             LIMIT 1
-         """
-      .query[Operation]
+    val filter =
+      fr"""
+           WHERE o.account_id = ${accountId.value}
+             AND o.uid = ${operationId.hex}
+           LIMIT 1
+        """
+
+    (operationWithTx ++ filter)
+      .query[(Op, Tx)]
       .option
   }
 

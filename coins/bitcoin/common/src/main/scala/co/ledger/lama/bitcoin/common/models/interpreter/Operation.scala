@@ -13,7 +13,7 @@ case class Operation(
     uid: Operation.UID,
     accountId: UUID,
     hash: String,
-    transaction: Option[TransactionView],
+    transaction: TransactionView,
     operationType: OperationType,
     amount: BigInt,
     fees: BigInt,
@@ -24,7 +24,7 @@ case class Operation(
     protobuf.Operation(
       UuidUtils.uuidToBytes(accountId),
       hash,
-      transaction.map(_.toProto),
+      Some(transaction.toProto),
       operationType.toProto,
       amount.toString,
       fees.toString,
@@ -53,7 +53,7 @@ object Operation {
       UID(proto.uid),
       UuidUtils.unsafeBytesToUuid(proto.accountId),
       proto.hash,
-      proto.transaction.map(TransactionView.fromProto),
+      proto.transaction.map(TransactionView.fromProto).get, // An operation has a transaction
       OperationType.fromProto(proto.operationType),
       BigInt(proto.amount),
       BigInt(proto.fees),
