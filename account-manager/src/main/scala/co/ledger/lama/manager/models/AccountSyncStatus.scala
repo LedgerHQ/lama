@@ -13,6 +13,7 @@ case class AccountSyncStatus(
     coin: Coin,
     syncFrequency: Long,
     label: Option[String],
+    group: String,
     syncId: UUID,
     status: Status,
     cursor: Option[JsonObject],

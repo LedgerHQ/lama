@@ -20,8 +20,8 @@ class UuidUtilsSpec extends AnyFunSuite with Matchers {
 
   test("account identifier to uuid") {
     assert(
-      AccountIdentifier("xpub", CoinFamily.Bitcoin, Coin.Btc).id ==
-        UUID.fromString("281f7c1c-f92f-3144-a6b2-514d9a2080e4")
+      AccountIdentifier("xpub", CoinFamily.Bitcoin, Coin.Btc, "UuidUtilsSpec:23").id ==
+        UUID.fromString("4159f144-4e96-3cfa-8495-f26b22a99459")
     )
   }
 

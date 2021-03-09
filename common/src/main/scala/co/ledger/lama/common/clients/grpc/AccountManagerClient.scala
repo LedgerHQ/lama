@@ -15,7 +15,8 @@ trait AccountManagerClient {
       coinFamily: CoinFamily,
       coin: Coin,
       syncFrequency: Option[Long],
-      label: Option[String]
+      label: Option[String],
+      group: String
   ): IO[SyncEventResult]
 
   def updateSyncFrequency(accountId: UUID, frequency: Long): IO[Unit]
@@ -29,7 +30,7 @@ trait AccountManagerClient {
   def unregisterAccount(accountId: UUID): IO[SyncEventResult]
 
   def getAccountInfo(accountId: UUID): IO[AccountInfo]
-  def getAccounts(limit: Option[Int], offset: Option[Int]): IO[AccountsResult]
+  def getAccounts(groupLabel: Option[String], limit: Option[Int], offset: Option[Int]): IO[AccountsResult]
   def getSyncEvents(
       accountId: UUID,
       limit: Option[Int],
@@ -55,7 +56,8 @@ class AccountManagerGrpcClient(
       coinFamily: CoinFamily,
       coin: Coin,
       syncFrequency: Option[Long],
-      label: Option[String]
+      label: Option[String],
+      group: String
   ): IO[SyncEventResult] =
     client
       .registerAccount(
@@ -64,7 +66,8 @@ class AccountManagerGrpcClient(
           coinFamily.toProto,
           coin.toProto,
           syncFrequency.getOrElse(0L), // if 0, will use default conf in account manager
-          label.map(protobuf.AccountLabel(_))
+          label.map(protobuf.AccountLabel(_)),
+          Some(protobuf.GroupLabel(group))
         ),
         new Metadata
       )
@@ -125,12 +128,14 @@ class AccountManagerGrpcClient(
       .map(AccountInfo.fromProto) // TODO: type T
 
   def getAccounts(
+      groupLabel: Option[String],
       limit: Option[Int] = None,
       offset: Option[Int] = None
   ): IO[AccountsResult] =
     client
       .getAccounts(
         protobuf.GetAccountsRequest(
+          groupLabel.map(protobuf.GroupLabel(_)),
           limit.getOrElse(0), // if 0, accountManager will default on correct value
           offset.getOrElse(0)
         ),

@@ -61,19 +61,22 @@ object Queries {
         )
     ).query[TriggerableEvent[JsonObject]].stream
 
-  def getAccounts(offset: Int, limit: Int): Stream[ConnectionIO, AccountSyncStatus] =
-    sql"""SELECT account_id, "key", coin_family, coin,
-            extract(epoch FROM sync_frequency) / 60 * 60, label,
+  def getAccounts(group: Option[String], offset: Int, limit: Int): Stream[ConnectionIO, AccountSyncStatus] = {
+    val groupFilter = group.map(name => fr"group_col = $name")
+    val q: Fragment = fr"""SELECT account_id, "key", coin_family, coin,
+            extract(epoch FROM sync_frequency) / 60 * 60, label, group_col
             sync_id, status, "cursor", error, updated
           FROM account_sync_status
-          LIMIT $limit
-          OFFSET $offset
-          """
-      .query[AccountSyncStatus]
+          """ ++
+          Fragments.whereAndOpt(groupFilter) ++
+          fr"""LIMIT $limit""" ++
+          fr"""OFFSET $offset"""
+      q.query[AccountSyncStatus]
       .stream
+  }
 
   def getAccountInfo(accountId: UUID): ConnectionIO[Option[AccountInfo]] =
-    sql"""SELECT account_id, "key", coin_family, coin, extract(epoch FROM sync_frequency)/60*60, label
+    sql"""SELECT account_id, "key", coin_family, coin, extract(epoch FROM sync_frequency)/60*60, label, group_col
           FROM account_info
           WHERE account_id = $accountId
          """
@@ -108,13 +111,14 @@ object Queries {
     val key        = accountIdentifier.key
     val coinFamily = accountIdentifier.coinFamily
     val coin       = accountIdentifier.coin
+    val group      = accountIdentifier.group
 
     val syncFrequencyInterval = new PGInterval()
     syncFrequencyInterval.setSeconds(syncFrequency.toDouble)
 
-    sql"""INSERT INTO account_info(account_id, "key", coin_family, coin, sync_frequency, label)
-          VALUES($accountId, $key, $coinFamily, $coin, $syncFrequencyInterval, $label)
-          RETURNING account_id, key, coin_family, coin, extract(epoch FROM sync_frequency)/60*60, label
+    sql"""INSERT INTO account_info(account_id, "key", coin_family, coin, sync_frequency, label, group_col)
+          VALUES($accountId, $key, $coinFamily, $coin, $syncFrequencyInterval, $label, $group)
+          RETURNING account_id, key, coin_family, coin, extract(epoch FROM sync_frequency)/60*60, label, group_col
           """
       .query[AccountInfo]
       .unique

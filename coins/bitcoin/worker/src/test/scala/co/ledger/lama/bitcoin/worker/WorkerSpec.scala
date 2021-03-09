@@ -28,7 +28,7 @@ class WorkerSpec extends AnyFlatSpec with Matchers {
   implicit val t: Timer[IO]         = IO.timer(ExecutionContext.global)
 
   val accountIdentifier =
-    AccountIdentifier(UUID.randomUUID().toString, CoinFamily.Bitcoin, Coin.Btc)
+    AccountIdentifier(UUID.randomUUID().toString, CoinFamily.Bitcoin, Coin.Btc, "WorkerSpec:31")
   val accountAddresses = LazyList.from(1).map(_.toString)
   val blockchain = LazyList
     .from(0)

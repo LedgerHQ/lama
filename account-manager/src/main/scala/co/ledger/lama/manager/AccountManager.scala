@@ -31,13 +31,15 @@ class AccountManager(val db: Transactor[IO], val coinConfigs: List[CoinConfig]) 
       coinFamily: CoinFamily,
       coin: Coin,
       syncFrequencyO: Option[Long],
-      label: Option[String]
+      label: Option[String],
+      group: String
   ): IO[SyncEventResult] = {
 
     val account = AccountIdentifier(
       key,
       coinFamily,
-      coin
+      coin,
+      group
     )
 
     for {
@@ -163,7 +165,8 @@ class AccountManager(val db: Transactor[IO], val coinConfigs: List[CoinConfig]) 
         accountInfo.coin,
         accountInfo.syncFrequency,
         lastSyncEvent,
-        accountInfo.label
+        accountInfo.label,
+        accountInfo.group
       )
     }
 
@@ -177,6 +180,7 @@ class AccountManager(val db: Transactor[IO], val coinConfigs: List[CoinConfig]) 
   }
 
   def getAccounts(
+      group: Option[String],
       requestLimit: Int,
       requestOffset: Int
   ): IO[AccountsResult] = {
@@ -186,6 +190,7 @@ class AccountManager(val db: Transactor[IO], val coinConfigs: List[CoinConfig]) 
     for {
       accounts <- Queries
         .getAccounts(
+          group,
           offset = offset,
           limit = limit
         )
@@ -213,7 +218,8 @@ class AccountManager(val db: Transactor[IO], val coinConfigs: List[CoinConfig]) 
                 account.updated
               )
             ),
-            account.label
+            account.label,
+            account.group
           )
         ),
         total

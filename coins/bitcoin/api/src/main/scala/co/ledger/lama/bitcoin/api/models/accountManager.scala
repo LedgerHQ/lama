@@ -53,6 +53,7 @@ object accountManager {
 
   case class CreationRequest(
       accountKey: AccountKey,
+      group: String,
       label: Option[String],
       scheme: Scheme,
       lookaheadSize: Int,

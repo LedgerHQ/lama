@@ -51,20 +51,22 @@ class AccountManagerSpec extends AnyFlatSpecLike with Matchers with BeforeAndAft
   var registeredSyncId: UUID    = _
 
   val testKey    = "12345"
+  val testGroup  = "AccountManagerSpec:54"
   val coinFamily = CoinFamily.Bitcoin
   val coin       = Coin.Btc
 
-  val updatedSyncFrequency: Long = 10000L
+  val updatedSyncFrequency: Long          = 10000L
+  val alternateUpdatedSyncFrequency: Long = 99999L
 
   val accountIdentifier: AccountIdentifier =
-    AccountIdentifier(testKey, CoinFamily.Bitcoin, Coin.Btc)
+    AccountIdentifier(testKey, coinFamily, coin, testGroup)
 
   it should "register a new account" in IOAssertion {
     transactor.use { db =>
       val service = new AccountManager(db, conf.coins)
 
       for {
-        response <- service.registerAccount(testKey, coinFamily, coin, None, None)
+        response <- service.registerAccount(testKey, coinFamily, coin, None, None, testGroup)
         event    <- getLastEvent(service, response.accountId)
       } yield {
         registeredAccountId = response.accountId
@@ -75,7 +77,8 @@ class AccountManagerSpec extends AnyFlatSpecLike with Matchers with BeforeAndAft
           AccountIdentifier(
             testKey,
             CoinFamily.Bitcoin,
-            Coin.Btc
+            Coin.Btc,
+            testGroup
           ).id
 
         // check event
@@ -103,7 +106,7 @@ class AccountManagerSpec extends AnyFlatSpecLike with Matchers with BeforeAndAft
     }
   }
 
-  it should "not allow the registration of an already existing account" in {
+  it should "prevent the registration of an already existing account in the same    group" in {
     an[PSQLException] should be thrownBy IOAssertion {
       transactor.use { db =>
         val service = new AccountManager(db, conf.coins)
@@ -114,12 +117,40 @@ class AccountManagerSpec extends AnyFlatSpecLike with Matchers with BeforeAndAft
             coinFamily,
             coin,
             Some(updatedSyncFrequency),
-            None
+            None,
+            testGroup
           )
       }
     }
   }
 
+  it should "allow   the registration of an already existing account in a different group" in IOAssertion {
+    transactor.use { db =>
+      val service  = new AccountManager(db, conf.coins)
+      val newGroup = "AccountManagerSpec:129"
+
+      for {
+        response <- service.registerAccount(
+          testKey,
+          coinFamily,
+          coin,
+          Some(alternateUpdatedSyncFrequency),
+          None,
+          newGroup
+        )
+      } yield {
+
+        // it should be an account uuid from extendKey, coinFamily, coin
+        response.accountId shouldBe
+          AccountIdentifier(
+            testKey,
+            CoinFamily.Bitcoin,
+            Coin.Btc,
+            newGroup
+          ).id
+      }
+    }
+  }
   var unregisteredSyncId: UUID                 = _
   var unregisteredEvent: SyncEvent[JsonObject] = _
 
@@ -173,13 +204,53 @@ class AccountManagerSpec extends AnyFlatSpecLike with Matchers with BeforeAndAft
     }
   }
 
-  it should "failed to get info from an unknown account" in {
+  it should "fail to get info from an unknown account" in {
     an[AccountNotFoundException] should be thrownBy IOAssertion {
       transactor.use { db =>
         new AccountManager(db, conf.coins)
           .getAccountInfo(
             UUID.randomUUID
           )
+      }
+    }
+  }
+
+
+  it should "get all accounts only in target group" in IOAssertion {
+    transactor.use { db =>
+      val service = new AccountManager(db, conf.coins)
+      val group1 = "First Group"
+      val group2 = "Second Group"
+      val keyA = UUID.randomUUID().toString
+      val keyB = UUID.randomUUID().toString
+      val keyC = UUID.randomUUID().toString
+      val accountIdA1 = AccountIdentifier(keyA, coinFamily, coin, group1).id
+      val accountIdB1 = AccountIdentifier(keyB, coinFamily, coin, group1).id
+      val accountIdA2 = AccountIdentifier(keyA, coinFamily, coin, group2).id
+      val accountIdC2 = AccountIdentifier(keyC, coinFamily, coin, group2).id
+
+      for {
+        _ <- service.registerAccount(keyA, coinFamily, coin, None, None, group1)
+        _ <- service.registerAccount(keyB, coinFamily, coin, None, None, group1)
+        _ <- service.registerAccount(keyA, coinFamily, coin, None, None, group2)
+        _ <- service.registerAccount(keyC, coinFamily, coin, None, None, group2)
+        listGroup1 <- service.getAccounts(Some(group1), 10, 0).map(_.accounts).map(innerList => innerList.map(_.id))
+        listGroup2 <- service.getAccounts(Some(group2), 10, 0).map(_.accounts).map(innerList => innerList.map(_.id))
+        listAllGroups <- service.getAccounts(None, 10, 0).map(_.accounts).map(innerList => innerList.map(_.id))
+      } yield {
+        listGroup1 should have size 2
+        listGroup1 should contain (accountIdA1)
+        listGroup1 should contain (accountIdB1)
+
+        listGroup2 should have size 2
+        listGroup2 should contain (accountIdA2)
+        listGroup2 should contain (accountIdC2)
+
+        listAllGroups should have size 4
+        listAllGroups should contain (accountIdA1)
+        listAllGroups should contain (accountIdB1)
+        listAllGroups should contain (accountIdA2)
+        listAllGroups should contain (accountIdC2)
       }
     }
   }

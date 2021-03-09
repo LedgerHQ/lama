@@ -7,8 +7,8 @@ import java.util.UUID
 import io.circe.{Decoder, Encoder}
 import io.circe.generic.extras.semiauto._
 
-case class AccountIdentifier(key: String, coinFamily: CoinFamily, coin: Coin) {
-  lazy val id: UUID = UUID.nameUUIDFromBytes((key + coinFamily + coin).getBytes)
+case class AccountIdentifier(key: String, coinFamily: CoinFamily, coin: Coin, group: String) {
+  lazy val id: UUID = UUID.nameUUIDFromBytes((key + coinFamily + coin + group).getBytes)
 }
 
 object AccountIdentifier {

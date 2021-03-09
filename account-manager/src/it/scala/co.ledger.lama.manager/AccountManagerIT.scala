@@ -42,7 +42,8 @@ class AccountManagerIT extends AnyFlatSpecLike with Matchers with TestResources 
               CoinFamily.Bitcoin,
               Coin.Btc,
               None,
-              None
+              None,
+              "AccountManagerIT:46"
             )
 
             registeredAccountId = registeredResult.accountId

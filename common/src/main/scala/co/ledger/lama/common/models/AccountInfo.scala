@@ -15,7 +15,8 @@ case class AccountInfo(
     coin: Coin,
     syncFrequency: Long,
     lastSyncEvent: Option[SyncEvent[JsonObject]],
-    label: Option[String]
+    label: Option[String],
+    group: String
 ) {
   def toProto: protobuf.AccountInfoResult =
     protobuf.AccountInfoResult(
@@ -25,7 +26,8 @@ case class AccountInfo(
       lastSyncEvent.map(_.toProto),
       coinFamily.toProto,
       coin.toProto,
-      label.map(protobuf.AccountLabel(_))
+      label.map(protobuf.AccountLabel(_)),
+      Some(protobuf.GroupLabel(group))
     )
 }
 
@@ -35,6 +37,9 @@ object AccountInfo {
   implicit val encoder: Encoder[AccountInfo] =
     deriveConfiguredEncoder[AccountInfo]
 
+  // Should fromProto be failible ?
+  // proto3 doesn't allow "required" fields, and here we want
+  // to ENSURE that an AccountInfo has a group
   def fromProto(proto: protobuf.AccountInfoResult): AccountInfo =
     AccountInfo(
       UuidUtils.bytesToUuid(proto.accountId).get,
@@ -43,6 +48,7 @@ object AccountInfo {
       Coin.fromProto(proto.coin),
       proto.syncFrequency,
       proto.lastSyncEvent.map(SyncEvent.fromProto[JsonObject]),
-      proto.label.map(_.value)
+      proto.label.map(_.value),
+      proto.group.map(_.value).getOrElse("Unknown")
     )
 }

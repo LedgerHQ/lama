@@ -85,6 +85,7 @@ object implicits {
           String,
           CoinFamily,
           Coin,
+          String,
           UUID,
           UUID,
           WorkableStatus,
@@ -92,9 +93,9 @@ object implicits {
           Option[JsonObject],
           Instant
       )
-    ].map { case (key, coinFamily, coin, accountId, syncId, status, cursor, error, updated) =>
+    ].map { case (key, coinFamily, coin, group, accountId, syncId, status, cursor, error, updated) =>
       WorkerMessage(
-        account = AccountIdentifier(key, coinFamily, coin),
+        account = AccountIdentifier(key, coinFamily, coin, group),
         event = WorkableEvent(
           accountId,
           syncId,
@@ -107,8 +108,8 @@ object implicits {
     }
 
   implicit val accountInfoRead: Read[AccountInfo] =
-    Read[(UUID, String, CoinFamily, Coin, Long, Option[String])].map {
-      case (accountId, key, coinFamily, coin, syncFrequency, label) =>
+    Read[(UUID, String, CoinFamily, Coin, Long, Option[String], String)].map {
+      case (accountId, key, coinFamily, coin, syncFrequency, label, group) =>
         AccountInfo(
           accountId,
           key,
@@ -116,7 +117,8 @@ object implicits {
           coin,
           syncFrequency,
           None,
-          label
+          label,
+          group
         )
     }
 
@@ -137,6 +139,7 @@ object implicits {
           accountInfo.coin,
           accountInfo.syncFrequency,
           accountInfo.label,
+          accountInfo.group,
           syncId,
           status,
           cursor,

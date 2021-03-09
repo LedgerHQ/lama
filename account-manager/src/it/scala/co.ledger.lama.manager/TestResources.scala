@@ -24,7 +24,7 @@ trait TestResources {
 
   val conf: Config = ConfigSource.default.loadOrThrow[Config]
 
-  val accountTest: AccountIdentifier = AccountIdentifier("12345", CoinFamily.Bitcoin, Coin.Btc)
+  val accountTest: AccountIdentifier = AccountIdentifier("12345", CoinFamily.Bitcoin, Coin.Btc, "TestResources:27")
 
   private val dbUrl      = conf.postgres.url
   private val dbUser     = conf.postgres.user

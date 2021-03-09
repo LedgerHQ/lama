@@ -256,7 +256,7 @@ object AccountControllerSpec {
 
   def validAccount(id: UUID): IO[AccountInfo] =
     IO.delay(
-      new AccountInfo(id, UUID.randomUUID().toString, CoinFamily.Bitcoin, Coin.Btc, 1L, None, None)
+      new AccountInfo(id, UUID.randomUUID().toString, CoinFamily.Bitcoin, Coin.Btc, 1L, None, None, "AccountControllerSpec:259")
     )
 
   def broadcastTransaction(rawTransaction: RawTransaction) = new BroadcastTransaction(
@@ -313,7 +313,8 @@ object AccountControllerSpec {
           coinFamily: CoinFamily,
           coin: Coin,
           syncFrequency: Option[Long],
-          label: Option[String]
+          label: Option[String],
+          group: String
       ): IO[SyncEventResult] = ???
 
       override def updateSyncFrequency(accountId: UUID, frequency: Long): IO[Unit] = ???
@@ -333,7 +334,7 @@ object AccountControllerSpec {
         getAccountInfoResponse(accountId)
       }
 
-      override def getAccounts(limit: Option[Int], offset: Option[Int]): IO[AccountsResult] = ???
+      override def getAccounts(group: Option[String], limit: Option[Int], offset: Option[Int]): IO[AccountsResult] = ???
 
       override def getSyncEvents(
           accountId: UUID,

@@ -46,7 +46,7 @@ class FakeOrchestrator(nbEvents: Int, override val awakeEvery: FiniteDuration)
     val now = Instant.now()
 
     (1 to nbEvents).map { i =>
-      val account = AccountIdentifier(s"xpub-$i", CoinFamily.Bitcoin, Coin.Btc)
+      val account = AccountIdentifier(s"xpub-$i", CoinFamily.Bitcoin, Coin.Btc, "OrchestatorSpec:49")
       val event = WorkableEvent[JsonObject](
         accountId = account.id,
         syncId = UUID.randomUUID(),

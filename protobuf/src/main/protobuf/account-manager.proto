@@ -19,8 +19,9 @@ service AccountManagerService {
 }
 
 message GetAccountsRequest {
-    int32 limit = 1;
-    int32 offset = 2;
+    GroupLabel group = 1;
+    int32 limit = 2;
+    int32 offset = 3;
 }
 
 message AccountsResult {
@@ -35,11 +36,17 @@ message RegisterAccountRequest {
     Coin coin = 3;
     uint64 sync_frequency = 4;
     AccountLabel label = 5;
+    GroupLabel group = 6;
 }
 
 message AccountLabel {
     string value = 1;
 }
+
+message GroupLabel {
+    string value = 1;
+}
+
 
 message UpdateAccountRequest {
     bytes account_id = 1;
@@ -82,6 +89,7 @@ message AccountInfoResult {
     CoinFamily coin_family = 5;
     Coin coin = 6;
     AccountLabel label = 7;
+    GroupLabel group = 8;
 }
 
 message GetSyncEventsRequest {

@@ -42,7 +42,8 @@ class AccountManagerGrpcService(accountManager: AccountManager)
         CoinFamily.fromProto(request.coinFamily),
         Coin.fromProto(request.coin),
         syncFrequencyO,
-        request.label.map(_.value)
+        request.label.map(_.value),
+        request.group.map(_.value).getOrElse("AccountManagerGrpcService:46")
       )
       .map(_.toProto)
   }
@@ -76,7 +77,7 @@ class AccountManagerGrpcService(accountManager: AccountManager)
       ctx: Metadata
   ): IO[protobuf.AccountsResult] =
     accountManager
-      .getAccounts(request.limit, request.offset)
+      .getAccounts(request.group.map(_.value), request.limit, request.offset)
       .map(_.toProto)
 
   def getSyncEvents(
