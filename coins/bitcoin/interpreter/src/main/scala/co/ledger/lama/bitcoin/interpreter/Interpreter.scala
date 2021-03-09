@@ -78,15 +78,14 @@ class Interpreter(
       blockHeight: Long
   ): IO[Int] = {
     for {
-      txRes <- transactionService.removeFromCursor(accountId, blockHeight)
-      _     <- operationService.removeFromCursor(accountId, blockHeight)
-      _     <- log.info(s"Deleted $txRes transactions")
+      opRes <- operationService.removeFromCursor(accountId, blockHeight)
+      _     <- log.info(s"Deleted $opRes operations")
       balancesRes <- balanceService.removeBalanceHistoryFromCursor(
         accountId,
         blockHeight
       )
       _ <- log.info(s"Deleted $balancesRes balances history")
-    } yield txRes
+    } yield opRes
   }
 
   def compute(

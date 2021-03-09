@@ -18,7 +18,7 @@ class InterpreterClientMock extends InterpreterClient {
   var operations: mutable.Map[UUID, List[Operation]]         = mutable.Map.empty
 
   def saveUnconfirmedTransactions(accountId: UUID, txs: List[TransactionView]): IO[Int] =
-    IO.delay {
+    IO.pure {
       savedUnconfirmedTransactions += accountId -> txs
       txs.size
     }
@@ -29,8 +29,12 @@ class InterpreterClientMock extends InterpreterClient {
   ): IO[Int] = {
     savedTransactions.update(
       accountId,
-      txs ::: savedTransactions.getOrElse(accountId, Nil)
+      txs.filter(_.block.isDefined) ::: savedTransactions.getOrElse(accountId, Nil)
     )
+
+    val unconfirmed = txs.filterNot(_.block.isDefined)
+    if (unconfirmed.nonEmpty)
+      saveUnconfirmedTransactions(accountId, unconfirmed)
 
     IO(txs.size)
   }

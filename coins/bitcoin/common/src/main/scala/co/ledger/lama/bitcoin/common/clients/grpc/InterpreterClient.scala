@@ -14,8 +14,6 @@ import io.grpc.{ManagedChannel, Metadata}
 trait InterpreterClient {
   def saveTransactions(accountId: UUID, txs: List[TransactionView]): IO[Int]
 
-  def saveUnconfirmedTransactions(accountId: UUID, txs: List[TransactionView]): IO[Int]
-
   def removeDataFromCursor(accountId: UUID, blockHeightCursor: Option[Long]): IO[Int]
 
   def getLastBlocks(accountId: UUID): IO[List[BlockView]]
@@ -77,17 +75,6 @@ class InterpreterGrpcClient(
   def saveTransactions(accountId: UUID, txs: List[TransactionView]): IO[Int] =
     client
       .saveTransactions(
-        protobuf.SaveTransactionsRequest(
-          accountId = UuidUtils uuidToBytes accountId,
-          transactions = txs.map(_.toProto)
-        ),
-        new Metadata()
-      )
-      .map(_.count)
-
-  def saveUnconfirmedTransactions(accountId: UUID, txs: List[TransactionView]): IO[Int] =
-    client
-      .saveUnconfirmedTransactions(
         protobuf.SaveTransactionsRequest(
           accountId = UuidUtils uuidToBytes accountId,
           transactions = txs.map(_.toProto)

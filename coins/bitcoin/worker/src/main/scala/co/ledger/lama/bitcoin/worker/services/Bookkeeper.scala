@@ -144,7 +144,10 @@ object Bookkeeper {
         explorer: ExplorerClient
     )(addresses: Set[Address], block: Option[BlockHash]): Stream[IO, Tx]
 
-    def save(interpreter: InterpreterClient)(accountId: AccountId, txs: List[Tx]): IO[String]
+    def save(interpreter: InterpreterClient)(accountId: AccountId, txs: List[Tx]): IO[String] =
+      for {
+        savedTxsCount <- interpreter.saveTransactions(accountId, txs.map(_.toTransactionView))
+      } yield s"$savedTxsCount new transactions saved from blockchain"
   }
 
   implicit def confirmed(implicit
@@ -156,13 +159,6 @@ object Bookkeeper {
           explorer: ExplorerClient
       )(addresses: Set[Address], block: Option[BlockHash]): Stream[IO, ConfirmedTransaction] =
         explorer.getConfirmedTransactions(addresses.toSeq, block)
-
-      override def save(
-          interpreter: InterpreterClient
-      )(accountId: AccountId, txs: List[ConfirmedTransaction]): IO[String] =
-        for {
-          savedTxsCount <- interpreter.saveTransactions(accountId, txs.map(_.toTransactionView))
-        } yield s"$savedTxsCount new transactions saved from blockchain"
     }
 
   implicit def unconfirmedTransaction(implicit
@@ -174,17 +170,6 @@ object Bookkeeper {
           explorer: ExplorerClient
       )(addresses: Set[Address], block: Option[BlockHash]): Stream[IO, UnconfirmedTransaction] =
         explorer.getUnconfirmedTransactions(addresses)
-
-      override def save(
-          interpreter: InterpreterClient
-      )(accountId: AccountId, txs: List[UnconfirmedTransaction]): IO[String] =
-        for {
-          savedTxsCount <- interpreter.saveUnconfirmedTransactions(
-            accountId,
-            txs.map(_.toTransactionView)
-          )
-        } yield s"$savedTxsCount new transactions saved from mempool"
-
     }
 
   case class BatchResult(

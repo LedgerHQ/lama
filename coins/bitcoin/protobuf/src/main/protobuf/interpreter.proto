@@ -11,7 +11,6 @@ option java_package = "co.ledger.lama.bitcoin.interpreter.protobuf";
 
 service BitcoinInterpreterService {
   rpc SaveTransactions(SaveTransactionsRequest) returns (ResultCount) {}
-  rpc SaveUnconfirmedTransactions(SaveTransactionsRequest) returns (ResultCount) {}
   rpc GetLastBlocks(GetLastBlocksRequest) returns (GetLastBlocksResult) {}
   rpc RemoveDataFromCursor(DeleteTransactionsRequest) returns (ResultCount) {}
   rpc GetOperations(GetOperationsRequest) returns (GetOperationsResult) {}
