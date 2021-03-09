@@ -1,9 +1,5 @@
 package co.ledger.lama.bitcoin.interpreter
 
-import co.ledger.lama.bitcoin.common.models.explorer._
-import java.time.Instant
-import java.util.UUID
-
 import co.ledger.lama.bitcoin.common.models.interpreter._
 import co.ledger.lama.bitcoin.interpreter.models.OperationToSave
 import co.ledger.lama.bitcoin.interpreter.services.OperationQueries.Op
@@ -76,13 +72,12 @@ class QueriesIT extends AnyFlatSpecLike with Matchers with TestResources {
         } yield {
 
           opWithTx shouldBe None
+          inputsWithOutputs should not be empty
 
-          val inputs: Seq[InputView] = inputsWithOutputs._1
+          val Some((inputs, outputs)) = inputsWithOutputs
 
           inputs should have size 1
           inputs.head.value shouldBe 80000
-
-          val outputs: Seq[OutputView] = inputsWithOutputs._2
 
           outputs should have size 2
           outputs.filter(_.outputIndex == 0).head.value shouldBe 50000

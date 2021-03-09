@@ -22,15 +22,14 @@ object QueryUtils {
   def fetchInputAndOutputs(
       db: Transactor[IO],
       accountId: UUID,
-      hash: String
-  ): IO[(List[InputView], List[OutputView])] = {
+      txHash: String
+  ): IO[Option[(List[InputView], List[OutputView])]] = {
     OperationQueries
-      .fetchInputsWithOutputsOrderedByTxHash(accountId, Sort.Descending, NonEmptyList.one(hash))
+      .fetchInputsWithOutputsOrderedByTxHash(accountId, Sort.Descending, NonEmptyList.one(txHash))
       .transact(db)
-      .map(_._2)
+      .map { case (_, inputWithOutputs) => inputWithOutputs }
       .compile
-      .toList
-      .map(_.head)
+      .last
   }
 
   def fetchOpAndTx(

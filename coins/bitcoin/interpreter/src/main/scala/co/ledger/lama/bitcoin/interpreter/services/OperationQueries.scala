@@ -203,10 +203,10 @@ object OperationQueries extends IOLogging {
     val belongsToTxs = allTxHashes(txHashes)
 
     (sql"""
-          SELECT i.hash, i.output_hash, i.output_index, i.input_index, i.value, i.address, i.script_signature, i.txinwitness, i.sequence, i.derivation
+          SELECT o.hash, i.output_hash, i.output_index, i.input_index, i.value, i.address, i.script_signature, i.txinwitness, i.sequence, i.derivation
             FROM operation o 
             LEFT JOIN input i on i.account_id = o.account_id and i.hash = o.hash
-           WHERE i.account_id = $accountId
+           WHERE o.account_id = $accountId
              AND $belongsToTxs
        """ ++ operationOrder(sort))
       .query[(String, Option[InputView])]
@@ -222,10 +222,10 @@ object OperationQueries extends IOLogging {
 
     (
       sql"""
-          SELECT output.hash, output.output_index, output.value, output.address, output.script_hex, output.change_type, output.derivation
+          SELECT o.hash, output.output_index, output.value, output.address, output.script_hex, output.change_type, output.derivation
             FROM operation o  
             LEFT JOIN output on output.account_id = o.account_id and output.hash = o.hash
-           WHERE output.account_id = $accountId
+           WHERE o.account_id = $accountId
              AND $belongsToTxs
        """ ++ operationOrder(sort)
     ).query[(String, Option[OutputView])]

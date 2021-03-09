@@ -43,9 +43,9 @@ class OperationService(
             .chunk(ops)
             .covary[ConnectionIO]
             .zip(inputsAndOutputs)
-            .flatMap { case ((txHash, operationsSentAndReceive), (txHash1, (inputs, outputs))) =>
+            .flatMap { case ((txHash, sentAndReceivedOperations), (txHash1, (inputs, outputs))) =>
               Stream
-                .chunk(operationsSentAndReceive)
+                .chunk(sentAndReceivedOperations)
                 .takeWhile(_ => txHash == txHash1)
                 .map { case (op, tx) =>
                   operation(tx, op, inputs, outputs)
@@ -81,8 +81,7 @@ class OperationService(
             NonEmptyList.one(op.hash)
           )
           .compile
-          .toList
-          .map(_.headOption)
+          .last
       )
       if txhash == op.hash
     } yield operation(tx, op, inputs, outputs)
@@ -228,14 +227,5 @@ class OperationService(
           OperationQueries.saveOperations(batch).transact(db).map(_ => batch)
         }
         .flatMap(Stream.chunk)
-
-}
-
-object OperationService {
-
-  sealed trait Error
-  case class NoMatchingTransactionError(operationId: Operation.UID)
-      extends Throwable(s"No transaction found for $operationId")
-      with Error
 
 }
