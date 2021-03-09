@@ -8,7 +8,7 @@ import co.ledger.lama.common.models.implicits._
 import co.ledger.lama.bitcoin.interpreter.models.{OperationToSave, TransactionAmounts}
 import co.ledger.lama.bitcoin.interpreter.models.implicits._
 import co.ledger.lama.common.logging.IOLogging
-import co.ledger.lama.common.models.Sort
+import co.ledger.lama.common.models.{Sort, TxHash}
 import doobie._
 import doobie.implicits._
 import doobie.postgres.implicits._
@@ -20,9 +20,12 @@ import java.time.Instant
 
 object OperationQueries extends IOLogging {
 
+  implicit val txHashRead: Read[TxHash]   = Read[String].map(TxHash.apply)
+  implicit val txHashWrite: Write[TxHash] = Write[String].contramap(_.hex)
+
   case class Tx(
       id: String,
-      hash: String,
+      hash: TxHash,
       receivedAt: Instant,
       lockTime: Long,
       fees: BigInt,
@@ -33,7 +36,7 @@ object OperationQueries extends IOLogging {
   case class Op(
       uid: Operation.UID,
       accountId: UUID,
-      hash: String,
+      hash: TxHash,
       operationType: OperationType,
       amount: BigInt,
       fees: BigInt,
@@ -44,13 +47,13 @@ object OperationQueries extends IOLogging {
   def fetchInputsWithOutputsOrderedByTxHash(
       accountId: UUID,
       sort: Sort,
-      txHashes: NonEmptyList[String]
-  ): Stream[doobie.ConnectionIO, (String, (List[InputView], List[OutputView]))] = {
+      txHashes: NonEmptyList[TxHash]
+  ): Stream[doobie.ConnectionIO, (TxHash, (List[InputView], List[OutputView]))] = {
     log.logger.debug(
       s"Fetching inputs and outputs for accountId $accountId and hashes in $txHashes"
     )
 
-    def groupByTxHash[T]: Pipe[ConnectionIO, (String, T), (String, Chunk[T])] =
+    def groupByTxHash[T]: Pipe[ConnectionIO, (TxHash, T), (TxHash, Chunk[T])] =
       _.groupAdjacentBy { case (txHash, _) => txHash }
         .map { case (txHash, chunks) => txHash -> chunks.map(_._2) }
 
@@ -191,13 +194,14 @@ object OperationQueries extends IOLogging {
        """.update.run
   }
 
-  private def operationOrder(sort: Sort)                = Fragment.const(s"ORDER BY o.time $sort, o.hash $sort")
-  private def allTxHashes(hashes: NonEmptyList[String]) = Fragments.in(fr"o.hash", hashes)
+  private def operationOrder(sort: Sort) = Fragment.const(s"ORDER BY o.time $sort, o.hash $sort")
+  private def allTxHashes(hashes: NonEmptyList[TxHash]) =
+    Fragments.in(fr"o.hash", hashes.map(_.hex))
 
   private def fetchInputs(
       accountId: UUID,
       sort: Sort,
-      txHashes: NonEmptyList[String]
+      txHashes: NonEmptyList[TxHash]
   ) = {
 
     val belongsToTxs = allTxHashes(txHashes)
@@ -209,13 +213,13 @@ object OperationQueries extends IOLogging {
            WHERE o.account_id = $accountId
              AND $belongsToTxs
        """ ++ operationOrder(sort))
-      .query[(String, Option[InputView])]
+      .query[(TxHash, Option[InputView])]
   }
 
   private def fetchOutputs(
       accountId: UUID,
       sort: Sort,
-      txHashes: NonEmptyList[String]
+      txHashes: NonEmptyList[TxHash]
   ) = {
 
     val belongsToTxs = allTxHashes(txHashes)
@@ -228,7 +232,7 @@ object OperationQueries extends IOLogging {
            WHERE o.account_id = $accountId
              AND $belongsToTxs
        """ ++ operationOrder(sort)
-    ).query[(String, Option[OutputView])]
+    ).query[(TxHash, Option[OutputView])]
   }
 
   def countOperations(accountId: UUID, blockHeight: Long = 0L): ConnectionIO[Int] =

@@ -3,6 +3,7 @@ package co.ledger.lama.bitcoin.interpreter
 import co.ledger.lama.bitcoin.common.models.interpreter._
 import co.ledger.lama.bitcoin.interpreter.models.OperationToSave
 import co.ledger.lama.bitcoin.interpreter.services.OperationQueries.Op
+import co.ledger.lama.common.models.TxHash
 import co.ledger.lama.common.utils.IOAssertion
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
@@ -59,7 +60,7 @@ class QueriesIT extends AnyFlatSpecLike with Matchers with TestResources {
           inputsWithOutputs <- QueryUtils.fetchInputAndOutputs(
             db,
             accountId,
-            transactionToInsert.hash
+            TxHash(transactionToInsert.hash)
           )
 
           account = Operation.AccountId(accountId)
@@ -115,7 +116,7 @@ class QueriesIT extends AnyFlatSpecLike with Matchers with TestResources {
             Op(
               opToSave.uid,
               opToSave.accountId,
-              opToSave.hash,
+              TxHash(opToSave.hash),
               opToSave.operationType,
               opToSave.value,
               opToSave.fees,

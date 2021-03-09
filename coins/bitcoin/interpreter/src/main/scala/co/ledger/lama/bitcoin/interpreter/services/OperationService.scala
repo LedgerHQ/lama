@@ -98,10 +98,10 @@ class OperationService(
     Operation(
       uid = op.uid,
       accountId = op.accountId,
-      hash = op.hash,
+      hash = op.hash.hex,
       transaction = TransactionView(
         id = tx.id,
-        hash = tx.hash,
+        hash = tx.hash.hex,
         receivedAt = tx.receivedAt,
         lockTime = tx.lockTime,
         fees = tx.fees,

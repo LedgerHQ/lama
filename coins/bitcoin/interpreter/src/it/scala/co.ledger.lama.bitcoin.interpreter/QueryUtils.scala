@@ -11,7 +11,7 @@ import co.ledger.lama.bitcoin.common.models.interpreter.{
 import co.ledger.lama.bitcoin.interpreter.models.OperationToSave
 import co.ledger.lama.bitcoin.interpreter.services.OperationQueries.Op
 import co.ledger.lama.bitcoin.interpreter.services.{OperationQueries, TransactionQueries}
-import co.ledger.lama.common.models.Sort
+import co.ledger.lama.common.models.{Sort, TxHash}
 import doobie.implicits._
 import doobie.util.transactor.Transactor
 import fs2.Chunk
@@ -22,7 +22,7 @@ object QueryUtils {
   def fetchInputAndOutputs(
       db: Transactor[IO],
       accountId: UUID,
-      txHash: String
+      txHash: TxHash
   ): IO[Option[(List[InputView], List[OutputView])]] = {
     OperationQueries
       .fetchInputsWithOutputsOrderedByTxHash(accountId, Sort.Descending, NonEmptyList.one(txHash))
