@@ -139,29 +139,6 @@ object OperationQueries extends IOLogging {
     Update[OperationToSave](query).updateMany(operation)
   }
 
-  def fetchUnconfirmedTransactions(
-      accountId: UUID
-  ): ConnectionIO[List[TransactionView]] = {
-    log.logger.debug(s"Fetching transactions for accountId $accountId")
-    sql"""SELECT transaction_views
-          FROM unconfirmed_transaction_view
-          WHERE account_id = $accountId
-       """
-      .query[Json]
-      .option
-      .map { t =>
-        t.map(_.as[List[TransactionView]]) match {
-          case Some(result) =>
-            result.leftMap { error =>
-              log.error("Could not parse TansactionView list json : ", error)
-              error
-            }
-          case None => Right(List.empty[TransactionView])
-        }
-      }
-      .rethrow
-  }
-
   def deleteUnconfirmedOperations(accountId: UUID): doobie.ConnectionIO[Int] = {
     sql"""DELETE FROM operation
          WHERE account_id = $accountId
