@@ -42,15 +42,15 @@ class BalanceService(db: Transactor[IO]) extends IOLogging {
 
   def getCurrentBalance(accountId: UUID): IO[CurrentBalance] =
     for {
-      blockchainBalance    <- BalanceQueries.getBlockchainBalance(accountId).transact(db)
-      mempoolBalanceAmount <- getMempoolBalanceAmount(accountId)
+      blockchainBalance <- BalanceQueries.getBlockchainBalance(accountId).transact(db)
+      mempoolBalance    <- BalanceQueries.getUnconfirmedBalance(accountId).transact(db)
     } yield {
       CurrentBalance(
         blockchainBalance.balance,
         blockchainBalance.utxos,
         blockchainBalance.received,
         blockchainBalance.sent,
-        blockchainBalance.balance + mempoolBalanceAmount
+        mempoolBalance
       )
     }
 
@@ -76,14 +76,15 @@ class BalanceService(db: Transactor[IO]) extends IOLogging {
 
       mempoolIsInTimeRange = endO.forall(end => end.isAfter(Instant.now()))
 
+      // Either last balance, or previous balance if no balance in time range or nobalance
+      lastBalance = balances.lastOption.orElse(previousBalance).map(_.balance).getOrElse(BigInt(0))
+
       // Add mempool balance to the last balance
       withMempoolBalance <-
         if (mempoolIsInTimeRange) {
-          // Either last balance, or previous balance if no balance in time range or nobalance
-          val lastBalance =
-            balances.lastOption.orElse(previousBalance).map(_.balance).getOrElse(BigInt(0))
-
-          getMempoolBalanceAmount(accountId)
+          BalanceQueries
+            .getUnconfirmedBalance(accountId)
+            .transact(db)
             .map(amount =>
               balances.appended(
                 BalanceHistory(
@@ -202,23 +203,6 @@ class BalanceService(db: Transactor[IO]) extends IOLogging {
       interval
     ).reverse
 
-  }
-
-  def getMempoolBalanceAmount(
-      accountId: UUID
-  ): IO[BigInt] = {
-    OperationQueries
-      .fetchUnconfirmedTransactionsViews(accountId)
-      .transact(db)
-      .map {
-        case Nil => BigInt(0)
-        case txs =>
-          txs.foldLeft(BigInt(0)) { (balance, tx) =>
-            balance +
-              tx.outputs.collect { case o if o.belongs => o.value }.sum -
-              tx.inputs.collect { case i if i.belongs => i.value }.sum
-          }
-      }
   }
 
 }

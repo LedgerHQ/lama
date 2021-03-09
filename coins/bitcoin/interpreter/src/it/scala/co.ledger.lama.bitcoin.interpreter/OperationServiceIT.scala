@@ -333,11 +333,8 @@ class OperationServiceIT extends AnyFlatSpecLike with Matchers with TestResource
         )
 
         for {
-          _ <- QueryUtils.saveUnconfirmedTxView(
-            db,
-            accountId,
-            List(unconfirmedTransaction1, unconfirmedTransaction2)
-          )
+          _     <- QueryUtils.saveTx(db, unconfirmedTransaction1, accountId)
+          _     <- QueryUtils.saveTx(db, unconfirmedTransaction2, accountId)
           utxos <- operationService.getUnconfirmedUtxos(accountId)
         } yield {
           utxos should have size 2

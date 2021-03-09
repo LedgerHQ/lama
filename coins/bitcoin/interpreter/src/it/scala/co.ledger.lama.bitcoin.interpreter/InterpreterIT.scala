@@ -95,8 +95,7 @@ class InterpreterIT extends AnyFlatSpecLike with Matchers with TestResources {
           _ <- interpreter.compute(
             accountId,
             List(inputAddress, outputAddress2),
-            Coin.Btc,
-            block.height
+            Coin.Btc
           )
 
           resOpsBeforeDeletion <- interpreter.getOperations(
@@ -196,13 +195,12 @@ class InterpreterIT extends AnyFlatSpecLike with Matchers with TestResources {
         )
 
         for {
-          _ <- interpreter.saveUnconfirmedTransactions(accountId, List(uTx))
-          _ <- interpreter.saveUnconfirmedTransactions(accountId, List(uTx2))
+          _ <- interpreter.saveTransactions(accountId, List(uTx))
+          _ <- interpreter.saveTransactions(accountId, List(uTx2))
           _ <- interpreter.compute(
             accountId,
             List(outputAddress1),
-            Coin.Btc,
-            block.height
+            Coin.Btc
           )
           res <- interpreter.getOperations(accountId, 0L, 20, 0, Sort.Descending)
           GetOperationsResult(operations, _, _) = res
@@ -221,7 +219,7 @@ class InterpreterIT extends AnyFlatSpecLike with Matchers with TestResources {
 
   }
 
-  "an unconfirmed transaction" should "not be saved if it's been mined" in IOAssertion {
+  "an unconfirmed transaction" should "be updated if it's been mined" in IOAssertion {
     setup() *>
       appResources.use { db =>
         val interpreter = new Interpreter(_ => IO.unit, db, 1)
@@ -251,13 +249,12 @@ class InterpreterIT extends AnyFlatSpecLike with Matchers with TestResources {
         )
 
         for {
-          _ <- interpreter.saveUnconfirmedTransactions(accountId, List(uTx))
+          _ <- interpreter.saveTransactions(accountId, List(uTx))
           _ <- interpreter.saveTransactions(accountId, List(tx))
           _ <- interpreter.compute(
             accountId,
             List(outputAddress1),
-            Coin.Btc,
-            block.height
+            Coin.Btc
           )
           res <- interpreter.getOperations(accountId, 0L, 20, 0, Sort.Descending)
           GetOperationsResult(operations, _, _) = res

@@ -70,7 +70,6 @@ message Utxo {
   ChangeType change_type = 6;
   repeated uint32 derivation = 7;
   google.protobuf.Timestamp time = 8;
-  bool used_in_mempool = 9;
 }
 
 message BlockView {

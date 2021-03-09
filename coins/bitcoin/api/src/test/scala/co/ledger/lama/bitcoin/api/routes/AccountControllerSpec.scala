@@ -55,8 +55,7 @@ class AccountControllerSpec extends AnyFlatSpec with Matchers {
           scriptHex = "",
           changeType = None,
           derivation = NonEmptyList.one(1),
-          time = Instant.now,
-          usedInMempool = false
+          time = Instant.now
         )
       )
     ),

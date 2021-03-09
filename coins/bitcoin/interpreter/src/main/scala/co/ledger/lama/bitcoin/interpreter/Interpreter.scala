@@ -31,12 +31,6 @@ class Interpreter(
   ): IO[Int] =
     transactionService.saveTransactions(accountId, transactions)
 
-  def saveUnconfirmedTransactions(
-      accountId: UUID,
-      transactions: List[TransactionView]
-  ): IO[Int] =
-    transactionService.saveUnconfirmedTransactions(accountId, transactions)
-
   def getLastBlocks(
       accountId: UUID
   ): IO[List[BlockView]] =
@@ -85,9 +79,7 @@ class Interpreter(
   ): IO[Int] = {
     for {
       txRes <- transactionService.removeFromCursor(accountId, blockHeight)
-      _     <- transactionService.deleteUnconfirmedTransaction(accountId)
       _     <- operationService.removeFromCursor(accountId, blockHeight)
-      _     <- operationService.deleteUnconfirmedTransactionView(accountId)
       _     <- log.info(s"Deleted $txRes transactions")
       balancesRes <- balanceService.removeBalanceHistoryFromCursor(
         accountId,
@@ -100,8 +92,7 @@ class Interpreter(
   def compute(
       accountId: UUID,
       addresses: List[AccountAddress],
-      coin: Coin,
-      lastBlockHeight: Long
+      coin: Coin
   ): IO[Int] =
     for {
       balanceHistoryCount <- balanceService.getBalanceHistoryCount(accountId)
@@ -109,19 +100,6 @@ class Interpreter(
       nbSavedOps <- saveOperationsAndNotify(
         accountId,
         operationService.compute(accountId),
-        addresses,
-        coin,
-        balanceHistoryCount > 0
-      )
-
-      unconfirmedTransactions <- computeAndSaveUnconfirmedTxs(accountId, addresses, lastBlockHeight)
-      unconfirmedOperations = unconfirmedTransactions.flatMap(
-        OperationToSave.fromTransactionView(accountId, _)
-      )
-
-      _ <- saveOperationsAndNotify(
-        accountId,
-        Stream.emits(unconfirmedOperations),
         addresses,
         coin,
         balanceHistoryCount > 0
@@ -141,49 +119,6 @@ class Interpreter(
       )
 
     } yield nbSavedOps
-
-  def computeAndSaveUnconfirmedTxs(
-      accountId: UUID,
-      addresses: List[AccountAddress],
-      lastBlockHeight: Long
-  ): IO[List[TransactionView]] =
-    for {
-      unconfirmedTransactions <- transactionService.fetchUnconfirmedTransactions(accountId)
-
-      // This is temporary... Will disappear in the next PR
-      unconfirmedTransactionsViews = unconfirmedTransactions.map { tx =>
-        tx.copy(
-          outputs = tx.outputs.map { o =>
-            val addressO = addresses.find(_.accountAddress == o.address)
-            o.copy(
-              changeType = addressO.map(_.changeType),
-              derivation = addressO.map(_.derivation)
-            )
-          },
-          inputs = tx.inputs.map { i =>
-            i.copy(
-              derivation = addresses.find(_.accountAddress == i.address).map(_.derivation)
-            )
-          }
-        )
-      }
-
-      //remove tx mined in between
-      minedTxs <- operationService.getOperations(
-        accountId,
-        lastBlockHeight,
-        1000,
-        0,
-        Sort.Descending
-      )
-      dedupTxs = unconfirmedTransactionsViews.filterNot(utx =>
-        minedTxs.operations.exists(tx => tx.hash == utx.hash)
-      )
-
-      _ <- operationService.deleteUnconfirmedTransactionView(accountId)
-      _ <- operationService.saveUnconfirmedTransactionView(accountId, dedupTxs)
-      _ <- transactionService.deleteUnconfirmedTransaction(accountId)
-    } yield dedupTxs
 
   def saveOperationsAndNotify(
       accountId: UUID,

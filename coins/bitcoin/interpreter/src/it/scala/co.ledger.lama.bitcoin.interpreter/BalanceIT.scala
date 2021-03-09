@@ -292,7 +292,7 @@ class BalanceIT extends AnyFlatSpecLike with Matchers with TestResources {
           _ <- QueryUtils.saveTx(db, tx1, accountId)
           _ <- QueryUtils.saveTx(db, tx2, accountId)
           _ <- QueryUtils.saveTx(db, tx3, accountId)
-          _ <- QueryUtils.saveUnconfirmedTxView(db, accountId, List(unconfirmedTx))
+          _ <- QueryUtils.saveTx(db, unconfirmedTx, accountId)
           _ <- flaggingService.flagInputsAndOutputs(
             accountId,
             List(address2, address3, address1)

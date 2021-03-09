@@ -43,7 +43,7 @@ class Transactor(
 
       accountInfo <- keychainClient.getKeychainInfo(keychainId)
 
-      utxos <- getUTXOs(accountId, 100, Sort.Ascending).filter(!_.usedInMempool).compile.toList
+      utxos <- getUTXOs(accountId, 100, Sort.Ascending).compile.toList
       _ <- log.info(
         s"""Utxos found for account $accountId:
             - number of utxos: ${utxos.size}

@@ -8,8 +8,6 @@ import co.ledger.lama.bitcoin.common.models.interpreter.{
   GetOperationsResult,
   GetUtxosResult,
   Operation,
-  OutputView,
-  TransactionView,
   Utxo
 }
 import co.ledger.lama.bitcoin.interpreter.models.{OperationToSave, TransactionAmounts}
@@ -67,19 +65,6 @@ class OperationService(
     op.value.transact(db)
   }
 
-  def deleteUnconfirmedTransactionView(accountId: UUID): IO[Int] =
-    OperationQueries
-      .deleteUnconfirmedTransactionsViews(accountId)
-      .transact(db)
-
-  def saveUnconfirmedTransactionView(
-      accountId: UUID,
-      transactions: List[TransactionView]
-  ): IO[Int] =
-    OperationQueries
-      .saveUnconfirmedTransactionView(accountId, transactions)
-      .transact(db)
-
   def deleteUnconfirmedOperations(accountId: UUID): IO[Int] =
     OperationQueries
       .deleteUnconfirmedOperations(accountId)
@@ -92,70 +77,25 @@ class OperationService(
       offset: Int
   ): IO[GetUtxosResult] =
     for {
-      confirmedUtxos <- OperationQueries
+      utxos <- OperationQueries
         .fetchUTXOs(accountId, sort, Some(limit + 1), Some(offset))
         .transact(db)
         .compile
         .toList
 
-      // Flag utxos used in the mempool
-      unconfirmedInputs <- OperationQueries
-        .fetchUnconfirmedTransactionsViews(accountId)
-        .transact(db)
-        .map(_.flatMap(_.inputs).filter(_.belongs))
-
       total <- OperationQueries.countUTXOs(accountId).transact(db)
 
     } yield {
-      val utxos = confirmedUtxos.map(utxo =>
-        utxo.copy(
-          usedInMempool = unconfirmedInputs.exists(input =>
-            input.outputHash == utxo.transactionHash && input.outputIndex == utxo.outputIndex
-          )
-        )
-      )
-
       // We get 1 more than necessary to know if there's more, then we return the correct number
       GetUtxosResult(utxos.slice(0, limit), total, truncated = utxos.size > limit)
     }
 
   def getUnconfirmedUtxos(accountId: UUID): IO[List[Utxo]] =
     OperationQueries
-      .fetchUnconfirmedTransactionsViews(accountId)
+      .fetchUnconfirmedUTXOs(accountId)
       .transact(db)
-      .map { unconfirmedTxs =>
-        val usedOutputs = unconfirmedTxs
-          .flatMap(_.inputs)
-          .filter(_.belongs)
-          .map(i => (i.outputHash, i.outputIndex))
-
-        val outputMap = unconfirmedTxs
-          .flatMap(tx =>
-            tx.outputs
-              .collect { case o @ OutputView(_, _, _, _, _, Some(derivation)) =>
-                (tx.hash, o.outputIndex) -> (tx.hash, o, tx.receivedAt, derivation)
-              }
-          )
-          .toMap
-
-        val unusedOutputs = outputMap.keys.toList
-          .diff(usedOutputs)
-          .map(outputMap)
-
-        unusedOutputs
-          .map { case (hash, output, time, derivation) =>
-            Utxo(
-              hash,
-              output.outputIndex,
-              output.value,
-              output.address,
-              output.scriptHex,
-              output.changeType,
-              derivation,
-              time
-            )
-          }
-      }
+      .compile
+      .toList
 
   def removeFromCursor(accountId: UUID, blockHeight: Long): IO[Int] =
     OperationQueries.removeFromCursor(accountId, blockHeight).transact(db)

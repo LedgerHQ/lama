@@ -8,14 +8,11 @@ import co.ledger.lama.bitcoin.common.models.interpreter.{
   OutputView,
   TransactionView
 }
-import co.ledger.lama.common.models.implicits._
 import co.ledger.lama.bitcoin.interpreter.models.implicits._
 import doobie._
 import doobie.implicits._
 import doobie.postgres.implicits._
 import fs2.Stream
-import io.circe.Json
-import io.circe.syntax._
 
 object TransactionQueries {
 
@@ -45,42 +42,29 @@ object TransactionQueries {
       txStatement
     }
 
-  def fetchUnconfirmedTransactions(
-      accountId: UUID
-  ): Stream[doobie.ConnectionIO, List[TransactionView]] = {
-    sql"""SELECT transactions
-          FROM unconfirmed_transaction_cache
-          WHERE account_id = $accountId
-       """
-      .query[Json]
-      .stream
-      .map(_.as[List[TransactionView]])
-      .rethrow
-  }
-
   def deleteUnconfirmedTransactions(accountId: UUID): doobie.ConnectionIO[Int] = {
-    sql"""DELETE FROM unconfirmed_transaction_cache
+    sql"""DELETE FROM transaction
          WHERE account_id = $accountId
-       """.update.run
-  }
-
-  def saveUnconfirmedTransactions(
-      accountId: UUID,
-      txs: List[TransactionView]
-  ): ConnectionIO[Int] = {
-    sql"""INSERT INTO unconfirmed_transaction_cache (
-            account_id, transactions
-          ) VALUES (
-            $accountId, ${txs.asJson}
-          )
+         AND block_hash IS NULL
        """.update.run
   }
 
   private def insertTx(
       accountId: UUID,
       tx: TransactionView
-  ) =
-    sql"""INSERT INTO transaction (
+  ): doobie.ConnectionIO[Int] = {
+
+    val update =
+      fr"""DO UPDATE SET
+              block_hash   = ${tx.block.map(_.hash)}, 
+              block_height = ${tx.block.map(_.height)}, 
+              block_time   = ${tx.block.map(_.time)}
+            WHERE transaction.block_hash IS NULL
+       """
+
+    val noUpdate = fr"""DO NOTHING"""
+
+    val query = sql"""INSERT INTO transaction (
             account_id, id, hash, block_hash, block_height, block_time, received_at, lock_time, fees, confirmations
           ) VALUES (
             $accountId,
@@ -93,14 +77,17 @@ object TransactionQueries {
             ${tx.lockTime},
             ${tx.fees},
             ${tx.confirmations}
-          ) ON CONFLICT ON CONSTRAINT transaction_pkey DO NOTHING
-       """.update.run
+          ) ON CONFLICT ON CONSTRAINT transaction_pkey """ ++
+      tx.block.map(_ => update).getOrElse(noUpdate)
+
+    query.update.run
+  }
 
   private def insertInputs(
       accountId: UUID,
       txHash: String,
       inputs: List[InputView]
-  ) = {
+  ): doobie.ConnectionIO[Int] = {
     val query =
       s"""INSERT INTO input (
             account_id, hash, output_hash, output_index, input_index, value, address, script_signature, txinwitness, sequence, derivation

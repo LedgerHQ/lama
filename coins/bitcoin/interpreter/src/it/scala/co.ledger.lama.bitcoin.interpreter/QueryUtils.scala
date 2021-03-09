@@ -25,28 +25,6 @@ object QueryUtils {
       .void
   }
 
-  def saveUnconfirmedTxs(
-      db: Transactor[IO],
-      accountId: UUID,
-      transactions: List[TransactionView]
-  ): IO[Unit] = {
-    TransactionQueries
-      .saveUnconfirmedTransactions(accountId, transactions)
-      .transact(db)
-      .void
-  }
-
-  def saveUnconfirmedTxView(
-      db: Transactor[IO],
-      accountId: UUID,
-      transactions: List[TransactionView]
-  ): IO[Unit] = {
-    OperationQueries
-      .saveUnconfirmedTransactionView(accountId, transactions)
-      .transact(db)
-      .void
-  }
-
   def fetchOps(db: Transactor[IO], accountId: UUID): IO[List[Operation]] = {
     OperationQueries
       .fetchOperations(accountId)

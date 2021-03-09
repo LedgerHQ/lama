@@ -28,34 +28,14 @@ class TransactionService(
       .fold(0)(_ + _)
   }
 
-  def fetchUnconfirmedTransactions(
-      accountId: UUID
-  )(implicit cs: ContextShift[IO]): IO[List[TransactionView]] =
-    TransactionQueries
-      .fetchUnconfirmedTransactions(accountId)
-      .transact(db)
-      .compile
-      .toList
-      .map(_.flatten)
-
-  def deleteUnconfirmedTransaction(accountId: UUID): IO[Int] =
-    TransactionQueries
-      .deleteUnconfirmedTransactions(accountId)
-      .transact(db)
-
-  def saveUnconfirmedTransactions(
-      accountId: UUID,
-      transactions: List[TransactionView]
-  )(implicit cs: ContextShift[IO]): IO[Int] = {
-    if (transactions.nonEmpty)
-      TransactionQueries
-        .saveUnconfirmedTransactions(accountId, transactions)
-        .transact(db)
-    else IO.pure(0)
-  }
-
   def removeFromCursor(accountId: UUID, blockHeight: Long): IO[Int] =
-    TransactionQueries.removeFromCursor(accountId, blockHeight).transact(db)
+    TransactionQueries
+      .removeFromCursor(accountId, blockHeight)
+      .flatMap(_ =>
+        TransactionQueries
+          .deleteUnconfirmedTransactions(accountId)
+      )
+      .transact(db)
 
   def getLastBlocks(accountId: UUID): Stream[IO, BlockView] =
     TransactionQueries

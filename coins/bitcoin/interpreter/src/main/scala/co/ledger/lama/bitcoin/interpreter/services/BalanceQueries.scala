@@ -51,9 +51,13 @@ object BalanceQueries {
               AND o.address = i.address
               AND o.output_index = i.output_index
 			        AND o.hash = i.output_hash
+            INNER JOIN transaction tx
+              ON o.account_id = tx.account_id
+              AND o.hash = tx.hash
           WHERE o.account_id = $accountId
             AND o.derivation IS NOT NULL
             AND i.address IS NULL
+            AND tx.block_hash IS NOT NULL
       """
         .query[(BigInt, Int)]
         .unique
@@ -77,6 +81,27 @@ object BalanceQueries {
       BlockchainBalance(balance, utxos, received, sent)
     }
   }
+
+  def getUnconfirmedBalance(
+      accountId: UUID
+  ): ConnectionIO[BigInt] =
+    sql"""SELECT COALESCE(SUM(o.value), 0)
+          FROM output o
+            LEFT JOIN input i
+              ON o.account_id = i.account_id
+              AND o.address = i.address
+              AND o.output_index = i.output_index
+			        AND o.hash = i.output_hash
+            INNER JOIN transaction tx
+              ON o.account_id = tx.account_id
+              AND o.hash = tx.hash
+          WHERE o.account_id = $accountId
+            AND o.derivation IS NOT NULL
+            AND i.address IS NULL
+            AND tx.block_hash IS NULL
+      """
+      .query[BigInt]
+      .unique
 
   def saveBalanceHistory(
       balances: List[BalanceHistory]
