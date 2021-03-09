@@ -44,20 +44,30 @@ object BalanceQueries {
       accountId: UUID
   ): ConnectionIO[BlockchainBalance] = {
     val balanceAndUtxosQuery =
-      sql"""SELECT COALESCE(SUM(o.value), 0), COALESCE(COUNT(o.value), 0)
+      sql"""
+          WITH all_inputs as (
+            SELECT i.account_id, i.address, i.output_index, i.output_hash
+            FROM input i
+              INNER JOIN transaction tx
+                ON  i.account_id = tx.account_id
+                AND i.hash       = tx.hash
+                AND tx.block_hash IS NOT NULL
+          )
+            
+          SELECT COALESCE(SUM(o.value), 0), COALESCE(COUNT(o.value), 0)
           FROM output o
-            LEFT JOIN input i
-              ON o.account_id = i.account_id
-              AND o.address = i.address
-              AND o.output_index = i.output_index
-			        AND o.hash = i.output_hash
+            LEFT JOIN all_inputs ai
+              ON  o.account_id   = ai.account_id
+              AND o.address      = ai.address
+              AND o.output_index = ai.output_index
+			        AND o.hash         = ai.output_hash
             INNER JOIN transaction tx
-              ON o.account_id = tx.account_id
-              AND o.hash = tx.hash
-          WHERE o.account_id = $accountId
-            AND o.derivation IS NOT NULL
-            AND i.address IS NULL
-            AND tx.block_hash IS NOT NULL
+              ON  o.account_id   = tx.account_id
+              AND o.hash         = tx.hash
+              AND tx.block_hash IS NOT NULL
+          WHERE o.account_id     = $accountId
+            AND o.derivation     IS NOT NULL
+            AND ai.address       IS NULL
       """
         .query[(BigInt, Int)]
         .unique
@@ -65,9 +75,13 @@ object BalanceQueries {
     val receivedAndSentQuery =
       sql"""SELECT
               COALESCE(SUM(CASE WHEN operation_type = 'receive' THEN amount ELSE 0 END), 0) as received,
-              COALESCE(SUM(CASE WHEN operation_type = 'send' THEN amount ELSE 0 END), 0) as sent
-            FROM operation
-            WHERE account_id = $accountId
+              COALESCE(SUM(CASE WHEN operation_type = 'send'    THEN amount ELSE 0 END), 0) as sent
+            FROM operation op
+            INNER JOIN transaction tx
+              ON  op.account_id = tx.account_id
+              AND op.hash       = tx.hash
+              AND tx.block_hash IS NOT NULL
+            WHERE op.account_id = $accountId
          """
         .query[(BigInt, BigInt)]
         .unique
@@ -85,20 +99,30 @@ object BalanceQueries {
   def getUnconfirmedBalance(
       accountId: UUID
   ): ConnectionIO[BigInt] =
-    sql"""SELECT COALESCE(SUM(o.value), 0)
+    sql"""
+          WITH new_utxo as (SELECT COALESCE(SUM(o.value), 0) as value
           FROM output o
-            LEFT JOIN input i
-              ON o.account_id = i.account_id
-              AND o.address = i.address
-              AND o.output_index = i.output_index
-			        AND o.hash = i.output_hash
             INNER JOIN transaction tx
-              ON o.account_id = tx.account_id
-              AND o.hash = tx.hash
+              ON  o.account_id = tx.account_id
+              AND o.hash       = tx.hash
+              AND tx.block_hash IS NULL -- take only new inputs account
           WHERE o.account_id = $accountId
             AND o.derivation IS NOT NULL
-            AND i.address IS NULL
-            AND tx.block_hash IS NULL
+          ),
+          
+          used_utxos as (
+            SELECT COALESCE(SUM(i.value), 0) as value
+            FROM input i
+              INNER JOIN transaction tx
+                ON  i.account_id = tx.account_id
+                AND i.hash       = tx.hash
+                AND tx.block_hash IS NULL
+            WHERE i.account_id = $accountId
+              AND i.derivation IS NOT NULL              
+          )
+          
+          SELECT new_utxo.value - used_utxos.value as pending_amount
+          FROM new_utxo, used_utxos
       """
       .query[BigInt]
       .unique
@@ -122,7 +146,8 @@ object BalanceQueries {
     val to   = end.map(e => fr"AND time <= $e").getOrElse(Fragment.empty)
 
     (
-      sql"""SELECT account_id, balance, block_height, time
+      sql"""
+          SELECT account_id, balance, block_height, time
           FROM balance_history
           WHERE account_id = $accountId
           """ ++
