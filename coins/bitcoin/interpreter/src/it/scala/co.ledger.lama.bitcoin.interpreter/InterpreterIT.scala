@@ -315,10 +315,11 @@ class InterpreterIT extends AnyFlatSpecLike with Matchers with TestResources {
         )
 
         for {
-          _            <- interpreter.saveTransactions(accountId, List(uTx1))
-          _            <- interpreter.compute(accountId, List(outputAddress1), Coin.Btc)
-          firstBalance <- interpreter.getBalance(accountId)
-          r1           <- interpreter.getOperations(accountId, 0L, 20, 0, Sort.Descending)
+          _             <- interpreter.saveTransactions(accountId, List(uTx1))
+          _             <- interpreter.compute(accountId, List(outputAddress1), Coin.Btc)
+          firstBalance  <- interpreter.getBalance(accountId)
+          firstBalanceH <- interpreter.getBalanceHistory(accountId, None, None, 0)
+          r1            <- interpreter.getOperations(accountId, 0L, 20, 0, Sort.Descending)
           GetOperationsResult(firstOperations, _, _) = r1
 
           _ <- interpreter.saveTransactions(
@@ -328,9 +329,10 @@ class InterpreterIT extends AnyFlatSpecLike with Matchers with TestResources {
               uTx2
             )
           )
-          _             <- interpreter.compute(accountId, List(outputAddress1, outputAddress2), Coin.Btc)
-          secondBalance <- interpreter.getBalance(accountId)
-          r2            <- interpreter.getOperations(accountId, 0L, 20, 0, Sort.Descending)
+          _              <- interpreter.compute(accountId, List(outputAddress1, outputAddress2), Coin.Btc)
+          secondBalance  <- interpreter.getBalance(accountId)
+          secondBalanceH <- interpreter.getBalanceHistory(accountId, None, None, 0)
+          r2             <- interpreter.getOperations(accountId, 0L, 20, 0, Sort.Descending)
           GetOperationsResult(secondOperations, _, _) = r2
 
           _ <- interpreter.saveTransactions(
@@ -342,23 +344,50 @@ class InterpreterIT extends AnyFlatSpecLike with Matchers with TestResources {
               uTx3
             )
           )
-          _           <- interpreter.compute(accountId, List(outputAddress1, outputAddress2), Coin.Btc)
-          lastBalance <- interpreter.getBalance(accountId)
-          r3          <- interpreter.getOperations(accountId, 0L, 20, 0, Sort.Descending)
+          _            <- interpreter.compute(accountId, List(outputAddress1, outputAddress2), Coin.Btc)
+          lastBalance  <- interpreter.getBalance(accountId)
+          lastBalanceH <- interpreter.getBalanceHistory(accountId, None, None, 0)
+          r3           <- interpreter.getOperations(accountId, 0L, 20, 0, Sort.Descending)
           GetOperationsResult(lastOperations, _, _) = r3
 
         } yield {
+
           firstOperations should have size 1
           firstBalance.balance shouldBe 0
           firstBalance.unconfirmedBalance shouldBe 100000
+          // mempool
+          firstBalanceH.last.balance shouldBe firstBalance.unconfirmedBalance
+          firstBalanceH.last.blockHeight shouldBe None
 
+          val firstBH = BalanceHistory(accountId, firstBalance.unconfirmedBalance, Some(1L), time)
           secondOperations should have size 2
           secondBalance.balance shouldBe 100000
-          secondBalance.unconfirmedBalance shouldBe 5000
+          secondBalance.unconfirmedBalance shouldBe 5000;
+          // mempool
+          secondBalanceH.last.balance shouldBe secondBalance.unconfirmedBalance + secondBalance.balance
+          secondBalanceH.last.blockHeight shouldBe None
+          // first block
+          secondBalanceH.head.balance shouldBe firstBH.balance
+          secondBalanceH.head.blockHeight shouldBe firstBH.blockHeight
 
+          val secondBH = BalanceHistory(
+            accountId,
+            secondBalance.unconfirmedBalance + secondBalance.balance,
+            Some(2L),
+            time.plus(10, ChronoUnit.MINUTES)
+          )
           lastOperations should have size 3
           lastBalance.balance shouldBe 105000
           lastBalance.unconfirmedBalance shouldBe -100000
+          // mempool
+          lastBalanceH.last.balance shouldBe lastBalance.unconfirmedBalance + lastBalance.balance
+          lastBalanceH.last.blockHeight shouldBe None
+          // second block
+          lastBalanceH(1).balance shouldBe secondBH.balance
+          lastBalanceH(1).blockHeight shouldBe secondBH.blockHeight
+          // first block
+          lastBalanceH.head.balance shouldBe firstBH.balance
+          lastBalanceH.head.blockHeight shouldBe firstBH.blockHeight
         }
       }
 
