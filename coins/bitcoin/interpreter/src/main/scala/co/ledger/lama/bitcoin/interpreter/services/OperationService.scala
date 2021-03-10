@@ -5,7 +5,7 @@ import cats.effect.{ContextShift, IO}
 import co.ledger.lama.bitcoin.common.models.interpreter._
 import co.ledger.lama.bitcoin.interpreter.models.{OperationToSave, TransactionAmounts}
 import co.ledger.lama.common.logging.IOLogging
-import co.ledger.lama.common.models.Sort
+import co.ledger.lama.common.models.{Sort, TxHash}
 import doobie._
 import doobie.implicits._
 import fs2._
@@ -27,10 +27,10 @@ class OperationService(
     for {
       opsWithTx <- OperationQueries
         .fetchOperations(accountId, blockHeight, sort, Some(limit + 1), Some(offset))
-        .groupAdjacentBy(_._1.hash) // many operations by hash (RECEIVED AND SENT)
-        .chunkN(5)                  // we have to figure out which value is more suitable here
+        .groupAdjacentBy { case (op, _) => op.hash } // many operations by hash (RECEIVED AND SENT)
+        .chunkN(5) // we have to figure out which value is more suitable here
         .flatMap { ops =>
-          val txHashes = ops.map(_._1).toNel
+          val txHashes = ops.map { case (txHash, _) => txHash }.toNel
 
           val inputsAndOutputs = Stream
             .emits(txHashes.toList)
@@ -43,16 +43,9 @@ class OperationService(
             .chunk(ops)
             .covary[ConnectionIO]
             .zip(inputsAndOutputs)
-            .flatMap { case ((txHash, sentAndReceivedOperations), (txHash1, (inputs, outputs))) =>
-              Stream
-                .chunk(sentAndReceivedOperations)
-                .takeWhile(_ => txHash == txHash1)
-                .map { case (op, tx) =>
-                  operation(tx, op, inputs, outputs)
-                }
-            }
         }
         .transact(db)
+        .through(makeOperation)
         .compile
         .toList
 
@@ -64,6 +57,23 @@ class OperationService(
     } yield {
       val operations = opsWithTx.take(limit)
       GetOperationsResult(operations, total, truncated)
+    }
+
+  private lazy val makeOperation: Pipe[
+    IO,
+    (
+        (TxHash, Chunk[(OperationQueries.Op, OperationQueries.Tx)]),
+        (TxHash, (List[InputView], List[OutputView]))
+    ),
+    Operation
+  ] =
+    _.flatMap { case ((txHash, sentAndReceivedOperations), (txHash1, (inputs, outputs))) =>
+      Stream
+        .chunk(sentAndReceivedOperations)
+        .takeWhile(_ => txHash == txHash1)
+        .map { case (op, tx) =>
+          operation(tx, op, inputs, outputs)
+        }
     }
 
   def getOperation(
