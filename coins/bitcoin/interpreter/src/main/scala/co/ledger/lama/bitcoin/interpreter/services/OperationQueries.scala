@@ -3,9 +3,7 @@ package co.ledger.lama.bitcoin.interpreter.services
 import java.util.UUID
 
 import cats.data.NonEmptyList
-import cats.implicits._
 import co.ledger.lama.bitcoin.common.models.interpreter._
-import co.ledger.lama.common.models.implicits._
 import co.ledger.lama.bitcoin.interpreter.models.{OperationToSave, TransactionAmounts}
 import co.ledger.lama.bitcoin.interpreter.models.implicits._
 import co.ledger.lama.common.logging.IOLogging
@@ -14,7 +12,6 @@ import doobie._
 import doobie.implicits._
 import doobie.postgres.implicits._
 import fs2.{Chunk, Stream}
-import io.circe.Json
 
 object OperationQueries extends IOLogging {
 

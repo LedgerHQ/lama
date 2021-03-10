@@ -45,29 +45,30 @@ object BalanceQueries {
   ): ConnectionIO[BlockchainBalance] = {
     val balanceAndUtxosQuery =
       sql"""
-          WITH all_inputs as (
-            SELECT i.account_id, i.address, i.output_index, i.output_hash
+          WITH confirmed_utxos as (
+            SELECT o.account_id, o.hash, o.output_index, o.address, o.value
+            FROM output o
+              INNER JOIN transaction tx
+                ON  o.account_id = tx.account_id
+                AND o.hash       = tx.hash
+                AND tx.block_hash IS NOT NULL
+            WHERE o.account_id = $accountId
+            AND   o.derivation IS NOT NULL
+            
+            EXCEPT
+            
+            SELECT i.account_id, i.output_hash, i.output_index, i.address, i.value
             FROM input i
               INNER JOIN transaction tx
                 ON  i.account_id = tx.account_id
                 AND i.hash       = tx.hash
                 AND tx.block_hash IS NOT NULL
+            WHERE i.account_id = $accountId
+            AND   i.derivation IS NOT NULL
           )
-            
-          SELECT COALESCE(SUM(o.value), 0), COALESCE(COUNT(o.value), 0)
-          FROM output o
-            LEFT JOIN all_inputs ai
-              ON  o.account_id   = ai.account_id
-              AND o.address      = ai.address
-              AND o.output_index = ai.output_index
-			        AND o.hash         = ai.output_hash
-            INNER JOIN transaction tx
-              ON  o.account_id   = tx.account_id
-              AND o.hash         = tx.hash
-              AND tx.block_hash IS NOT NULL
-          WHERE o.account_id     = $accountId
-            AND o.derivation     IS NOT NULL
-            AND ai.address       IS NULL
+          
+          SELECT COALESCE(SUM(value), 0), COALESCE(COUNT(value), 0)
+          FROM confirmed_utxos
       """
         .query[(BigInt, Int)]
         .unique

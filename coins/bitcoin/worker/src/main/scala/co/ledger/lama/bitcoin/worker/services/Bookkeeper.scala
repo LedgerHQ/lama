@@ -147,7 +147,7 @@ object Bookkeeper {
     def save(interpreter: InterpreterClient)(accountId: AccountId, txs: List[Tx]): IO[String] =
       for {
         savedTxsCount <- interpreter.saveTransactions(accountId, txs.map(_.toTransactionView))
-      } yield s"$savedTxsCount new transactions saved from blockchain"
+      } yield s"$savedTxsCount new transactions saved"
   }
 
   implicit def confirmed(implicit
