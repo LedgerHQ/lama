@@ -41,18 +41,22 @@ class BalanceService(db: Transactor[IO]) extends IOLogging {
     } yield nbSaved
 
   def getCurrentBalance(accountId: UUID): IO[CurrentBalance] =
-    for {
-      blockchainBalance <- BalanceQueries.getBlockchainBalance(accountId).transact(db)
-      mempoolBalance    <- BalanceQueries.getUnconfirmedBalance(accountId).transact(db)
-    } yield {
-      CurrentBalance(
-        blockchainBalance.balance,
-        blockchainBalance.utxos,
-        blockchainBalance.received,
-        blockchainBalance.sent,
-        mempoolBalance
-      )
-    }
+    BalanceQueries
+      .getBlockchainBalance(accountId)
+      .flatMap { blockchainBalance =>
+        BalanceQueries
+          .getUnconfirmedBalance(accountId)
+          .map(mempoolBalance =>
+            CurrentBalance(
+              blockchainBalance.balance,
+              blockchainBalance.utxos,
+              blockchainBalance.received,
+              blockchainBalance.sent,
+              mempoolBalance
+            )
+          )
+      }
+      .transact(db)
 
   def getBalanceHistory(
       accountId: UUID,
